@@ -1,0 +1,34 @@
+services:
+  db:
+    image: mysql:8.0
+    container_name: mysql_calendar_db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: calendar_db
+      MYSQL_USER: bot_user
+      MYSQL_PASSWORD: bot_password
+      MYSQL_ROOT_PASSWORD: root_strong_password
+      TZ: Europe/Moscow # Время МСК для базы данных
+    ports:
+      - "3306:3306"
+    volumes:
+      # Папка на VPS для хранения данных базы (чтобы они не стирались)
+      - mysql_data:/var/lib/mysql
+      # Автоматическое выполнение скрипта инициализации таблиц
+      - ./bd/migrations/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  bot:
+    build: .
+    container_name: ts_calendar_bot
+    restart: unless-stopped
+    depends_on:
+      - db
+    environment:
+      BOT_TOKEN: ${BOT_TOKEN} # Замените на ваш токен от BotFather
+      DB_HOST: db
+      DB_USER: bot_user
+      DB_PASSWORD: bot_password
+      DB_NAME: calendar_db
+
+volumes:
+  mysql_data:

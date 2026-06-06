@@ -23,11 +23,41 @@ const bot = new Telegraf<Context>(token);
 interface UserSession {
   selectedDate?: string;
   selectedTime?: string;
-  step?: "awaiting_time_hour" | "awaiting_time_minute" | "awaiting_title";
+  selectedChats?: number[]; // Массив ID выбранных чатов
+  step?: "awaiting_chats" | "awaiting_title";
 }
 const userSessions: Record<number, UserSession> = {};
 
-// --- Интерфейс календаря и времени ---
+// --- Логирование добавления бота в группы/каналы ---
+bot.on("my_chat_member", async (ctx) => {
+  const chat = ctx.myChatMember.chat;
+  const status = ctx.myChatMember.new_chat_member.status;
+
+  // Если бота добавили в группу или сделали администратором канала
+  if (status === "member" || status === "administrator") {
+    const title = "title" in chat ? chat.title : "Канал/Группа";
+    try {
+      await db.execute(
+        "INSERT INTO chats (chat_id, chat_title) VALUES (?, ?) ON DUPLICATE KEY UPDATE chat_title = ?",
+        [chat.id, title, title],
+      );
+      console.log(`[DB] Бот добавлен в чат: ${title} (${chat.id})`);
+    } catch (err) {
+      console.error("Ошибка сохранения чата:", err);
+    }
+  }
+  // Если бота удалили из чата
+  else if (status === "left" || status === "kicked") {
+    try {
+      await db.execute("DELETE FROM chats WHERE chat_id = ?", [chat.id]);
+      console.log(`[DB] Бот удален из чата: (${chat.id})`);
+    } catch (err) {
+      console.error("Ошибка удаления чата:", err);
+    }
+  }
+});
+
+// --- Клавиатуры ---
 function createCalendarKeyboard() {
   const now = new Date();
   const year = now.getFullYear();
@@ -71,7 +101,6 @@ function createCalendarKeyboard() {
     currentWeek.push(
       Markup.button.callback(String(day), `date:${year}-${monthStr}-${dayStr}`),
     );
-
     if (currentWeek.length === 7) {
       buttons.push(currentWeek);
       currentWeek = [];
@@ -107,72 +136,52 @@ function createMinutesKeyboard(hour: string) {
   return Markup.inlineKeyboard([row]);
 }
 
-// --- Команды бота ---
-bot.start((ctx) => {
+// Генератор меню выбора чатов с динамическими галочками ✅
+function createChatsKeyboard(availableChats: any[], selectedIds: number[]) {
+  const buttons = [];
+
+  for (const chat of availableChats) {
+    const isSelected = selectedIds.includes(Number(chat.chat_id));
+    const prefix = isSelected ? "✅ " : "⬜ ";
+    buttons.push([
+      Markup.button.callback(
+        `${prefix}${chat.chat_title}`,
+        `toggle_chat:${chat.chat_id}`,
+      ),
+    ]);
+  }
+
+  buttons.push([
+    Markup.button.callback("➡️ Подтвердить выбор чатов", "confirm_chats"),
+  ]);
+  return Markup.inlineKeyboard(buttons);
+}
+
+// --- Команды ---
+bot.start((ctx) =>
   ctx.reply(
-    "Привет! Я твой МСК бот-календарь с напоминаниями.\n\n" +
-      "📅 /add — запланировать событие\n" +
-      "📋 /list — список и управление событиями",
-  );
-});
+    "Привет! Используй /add в ЛИЧНЫХ сообщениях бота для создания напоминаний.",
+  ),
+);
 
 bot.command("add", (ctx) => {
-  const userId = ctx.from?.id;
-  if (!userId) return;
-  userSessions[userId] = {};
-  ctx.reply("Шаг 1/3: Выбери дату:", createCalendarKeyboard());
-});
-
-bot.command("list", async (ctx) => {
-  const userId = ctx.from?.id;
-  if (!userId) return;
-
-  try {
-    const [rows]: [any[], any] = await db.execute(
-      "SELECT id, event_title, event_date FROM events WHERE user_id = ? ORDER BY event_date ASC",
-      [userId],
+  if (ctx.chat.type !== "private") {
+    return ctx.reply(
+      "⚠️ Настраивать события можно только в личном чате с ботом.",
     );
-
-    if (rows.length === 0) {
-      return ctx.reply("📭 У вас пока нет запланированных событий.");
-    }
-
-    await ctx.reply("📋 **Ваши запланированные события:**", {
-      parse_mode: "Markdown",
-    });
-
-    for (const event of rows) {
-      const dateObj = new Date(event.event_date);
-      const day = String(dateObj.getDate()).padStart(2, "0");
-      const month = String(dateObj.getMonth() + 1).padStart(2, "0");
-      const hours = String(dateObj.getHours()).padStart(2, "0");
-      const minutes = String(dateObj.getMinutes()).padStart(2, "0");
-
-      const messageText = `📌 **${event.event_title}**\n📅 ${day}.${month}.${dateObj.getFullYear()} в ${hours}:${minutes} (МСК)`;
-
-      await ctx.reply(messageText, {
-        parse_mode: "Markdown",
-        ...Markup.inlineKeyboard([
-          Markup.button.callback("❌ Удалить", `delete:${event.id}`),
-        ]),
-      });
-    }
-  } catch (error) {
-    console.error(error);
-    ctx.reply("❌ Не удалось получить список.");
   }
+  const userId = ctx.from.id;
+  userSessions[userId] = { selectedChats: [] };
+  ctx.reply("Шаг 1/4: Выбери дату:", createCalendarKeyboard());
 });
 
-// --- Обработка инлайн-кнопок (с фиксом типов) ---
 bot.action(/^date:(.+)$/, async (ctx) => {
   const userId = ctx.from?.id;
   if (!userId || !ctx.match) return;
-  const selectedDate = ctx.match[1]; // Фикс RegExpExecArray
-
-  userSessions[userId] = { selectedDate, step: "awaiting_time_hour" };
+  if (userSessions[userId]) userSessions[userId].selectedDate = ctx.match[1];
   await ctx.answerCbQuery();
   await ctx.editMessageText(
-    `Выбрана дата: ${selectedDate}\n\nШаг 2/3: Выбери час (МСК):`,
+    `Дата выбрана.\n\nШаг 2/4: Выбери час (МСК):`,
     createHoursKeyboard(),
   );
 });
@@ -180,53 +189,72 @@ bot.action(/^date:(.+)$/, async (ctx) => {
 bot.action(/^hour:(.+)$/, async (ctx) => {
   const userId = ctx.from?.id;
   if (!userId || !ctx.match) return;
-  const hour = ctx.match[1]; // Фикс RegExpExecArray
-
-  if (userSessions[userId]) userSessions[userId].step = "awaiting_time_minute";
   await ctx.answerCbQuery();
   await ctx.editMessageText(
-    `Выбран час: ${hour}:00\n\nШаг 2/3: Уточни минуты:`,
-    createMinutesKeyboard(hour),
+    `Час выбран.\n\nШаг 2/4: Уточни минуты:`,
+    createMinutesKeyboard(ctx.match[1]),
   );
 });
 
+// Переход к выбору чатов
 bot.action(/^time:(.+):(.+)$/, async (ctx) => {
   const userId = ctx.from?.id;
   if (!userId || !ctx.match) return;
-  const hour = ctx.match[1]; // Фикс RegExpExecArray
-  const minute = ctx.match[2]; // Фикс RegExpExecArray
-  const fullTime = `${hour}:${minute}`;
-
   if (userSessions[userId]) {
-    userSessions[userId].selectedTime = fullTime;
-    userSessions[userId].step = "awaiting_title";
+    userSessions[userId].selectedTime = `${ctx.match[1]}:${ctx.match[2]}`;
+    userSessions[userId].step = "awaiting_chats";
   }
   await ctx.answerCbQuery();
+
+  // Достаем из БД чаты, где состоит бот
+  const [chats]: [any[], any] = await db.execute(
+    "SELECT chat_id, chat_title FROM chats",
+  );
   await ctx.editMessageText(
-    `Дата: ${userSessions[userId]?.selectedDate}\nВремя: ${fullTime} (МСК)\n\nШаг 3/3: Отправь название события.`,
+    `Время выбрано.\n\nШаг 3/4: Выбери группы/каналы для отправки дубликата (помимо лички):`,
+    createChatsKeyboard(chats, userSessions[userId].selectedChats || []),
   );
 });
 
-bot.action(/^delete:(.+)$/, async (ctx) => {
+// Переключение галочки у чата
+bot.action(/^toggle_chat:(.+)$/, async (ctx) => {
   const userId = ctx.from?.id;
   if (!userId || !ctx.match) return;
-  const eventId = ctx.match[1];
+  const chatId = Number(ctx.match[1]);
+  const session = userSessions[userId];
 
-  try {
-    const [result]: any = await db.execute(
-      "DELETE FROM events WHERE id = ? AND user_id = ?",
-      [eventId, userId],
+  if (session && session.selectedChats) {
+    if (session.selectedChats.includes(chatId)) {
+      session.selectedChats = session.selectedChats.filter(
+        (id) => id !== chatId,
+      );
+    } else {
+      session.selectedChats.push(chatId);
+    }
+    await ctx.answerCbQuery();
+    const [chats]: [any[], any] = await db.execute(
+      "SELECT chat_id, chat_title FROM chats",
     );
-    await ctx.answerCbQuery("Событие удалено!");
-    if (result.affectedRows > 0) await ctx.deleteMessage();
-  } catch (error) {
-    await ctx.answerCbQuery("Ошибка при удалении");
+    await ctx.editMessageReplyMarkup(
+      createChatsKeyboard(chats, session.selectedChats).reply_markup,
+    );
   }
+});
+
+// Подтверждение выбора чатов
+bot.action("confirm_chats", async (ctx) => {
+  const userId = ctx.from?.id;
+  if (!userId) return;
+  if (userSessions[userId]) userSessions[userId].step = "awaiting_title";
+  await ctx.answerCbQuery();
+  await ctx.editMessageText(
+    `Чаты зафиксированы.\n\nШаг 4/4: Отправь название события текстом.`,
+  );
 });
 
 bot.action("ignore", async (ctx) => await ctx.answerCbQuery());
 
-// --- Прием текста ---
+// Сохранение названия и запись в MySQL
 bot.on("text", async (ctx, next) => {
   const userId = ctx.from?.id;
   if (!userId) return next();
@@ -240,14 +268,16 @@ bot.on("text", async (ctx, next) => {
   ) {
     const eventTitle = ctx.message.text.trim();
     const fullDateTime = `${session.selectedDate} ${session.selectedTime}:00`;
+    // Превращаем массив ID чатов в строку через запятую
+    const targetChatsStr = (session.selectedChats || []).join(",");
 
     try {
       await db.execute(
-        "INSERT INTO events (user_id, event_title, event_date) VALUES (?, ?, ?)",
-        [userId, eventTitle, fullDateTime],
+        "INSERT INTO events (user_id, event_title, event_date, target_chats) VALUES (?, ?, ?, ?)",
+        [userId, eventTitle, fullDateTime, targetChatsStr],
       );
       ctx.reply(
-        `✅ Событие добавлено!\n📌 ${eventTitle}\n📅 ${session.selectedDate} в ${session.selectedTime} (МСК)`,
+        `✅ Событие успешно создано! Напоминание придет вам в личку и во все выбранные каналы.`,
       );
       delete userSessions[userId];
     } catch (error) {
@@ -258,47 +288,59 @@ bot.on("text", async (ctx, next) => {
   }
 });
 
-// --- CRON JOB: НАПОМИНАНИЯ КАЖДУЮ МИНУТУ ---
+// --- КРОН С МУЛЬТИ-ОТПРАВКОЙ ---
 cron.schedule("* * * * *", async () => {
   const now = new Date();
-
-  // Форматируем текущее Московское время под формат DATETIME в MySQL
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  const hour = String(now.getHours()).padStart(2, "0");
-  const minute = String(now.getMinutes()).padStart(2, "0");
-
-  const currentCheckTime = `${year}-${month}-${day} ${hour}:${minute}:00`;
-
+  now.setHours(now.getHours() + 3);
+  const currentCheckTime = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:00`;
+  console.log("now", now);
+  console.log("currentCheckTime", currentCheckTime);
+  const [rows1]: [any[], any] = await db.execute(
+    "SELECT id, user_id, event_title, target_chats, event_date FROM events",
+  );
+  console.log("rows1", rows1);
   try {
-    // Выбираем события, время которых наступило прямо сейчас
     const [rows]: [any[], any] = await db.execute(
-      "SELECT id, user_id, event_title FROM events WHERE event_date = ?",
+      "SELECT id, user_id, event_title, target_chats FROM events WHERE event_date = ?",
       [currentCheckTime],
     );
 
     for (const event of rows) {
+      console.log("event.event_date", event.event_date);
+      // 1. Уведомление создателю в личку
       try {
         await bot.telegram.sendMessage(
           event.user_id,
-          `⏰ **НАПОМИНАНИЕ!**\n\n🔔 Наступило запланированное событие:\n👉 **${event.event_title}**`,
+          `⏰ **НАПОМИНАНИЕ!**\n👉 **${event.event_title}**`,
           { parse_mode: "Markdown" },
         );
-        // Удаляем событие после отправки уведомления
-        await db.execute("DELETE FROM events WHERE id = ?", [event.id]);
-      } catch (tgError) {
-        console.error(
-          `Ошибка отправки пользователю ${event.user_id}:`,
-          tgError,
-        );
+      } catch (e) {
+        console.error("Не смогли отправить создателю:", e);
       }
+
+      // 2. Уведомление в выбранные группы/каналы
+      if (event.target_chats) {
+        const chatIds = event.target_chats.split(",").map(Number);
+        for (const chatId of chatIds) {
+          try {
+            await bot.telegram.sendMessage(
+              chatId,
+              `📢 **Внимание, напоминание для чата!**\n📌 Событие: **${event.event_title}**`,
+              { parse_mode: "Markdown" },
+            );
+          } catch (chatErr) {
+            console.error(`Не смогли отправить в чат ${chatId}:`, chatErr);
+          }
+        }
+      }
+      // Удаляем после отправки
+      await db.execute("DELETE FROM events WHERE id = ?", [event.id]);
     }
   } catch (dbError) {
-    console.error("Ошибка выполнения Cron в БД:", dbError);
+    console.error(dbError);
   }
 });
 
-bot.launch().then(() => console.log("Бот-календарь с Кроном успешно запущен!"));
+bot.launch().then(() => console.log("Мульти-чат Бот запущен!"));
 process.once("SIGINT", () => bot.stop("SIGINT"));
 process.once("SIGTERM", () => bot.stop("SIGTERM"));

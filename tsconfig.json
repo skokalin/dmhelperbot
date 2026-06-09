@@ -8,5 +8,5 @@
     "forceConsistentCasingInFileNames": true,
     "outDir": "./dist",
   },
-  "include": ["bot.ts"],
+  "include": ["src/bot.ts/*"],
 }

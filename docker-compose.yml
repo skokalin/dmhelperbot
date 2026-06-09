@@ -15,7 +15,7 @@ services:
       # Папка на VPS для хранения данных базы (чтобы они не стирались)
       - mysql_data:/var/lib/mysql
       # Автоматическое выполнение скрипта инициализации таблиц
-      - ./bd/migrations/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
 
   bot:
     build: .

@@ -3,5 +3,6 @@ WORKDIR /app
 COPY package*.json ./
 COPY tsconfig.json ./
 RUN npm install
-COPY bot.ts .
+# Копируем структуру директории src целиком
+COPY src/ ./src/
 CMD ["npm", "start"]

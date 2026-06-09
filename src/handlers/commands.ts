@@ -59,4 +59,31 @@ export function initCommands(
       ctx.reply("❌ Ошибка получения списка.");
     }
   });
+
+  bot.command("chats", async (ctx) => {
+    try {
+      const [rows]: [any[], any] = await db.execute(
+        "SELECT chat_id, chat_title FROM chats ORDER BY chat_title ASC LIMIT 100",
+        [],
+      );
+
+      if (rows.length === 0) {
+        return ctx.reply("🌐 В вашей базе данных нет сохраненных чатов.");
+      }
+
+      let message = "✨ **Ваши сохраненные чаты:**\n\n";
+      for (const chat of rows) {
+        const chatId = chat.chat_id;
+        const chatTitle = chat.chat_title;
+
+        // Для простоты выведем ID и название.
+        message += `🌐 **${chatTitle}** (ID: \`${chatId}\`)\n`;
+      }
+
+      await ctx.reply(message, { parse_mode: "Markdown" });
+    } catch (error) {
+      console.error("Error fetching chats:", error);
+      ctx.reply("❌ Произошла ошибка при получении списка чатов.");
+    }
+  });
 }

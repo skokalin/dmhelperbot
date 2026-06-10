@@ -6,9 +6,36 @@ export function initCommands(
   bot: Telegraf<Context>,
   userSessions: Record<number, any>,
 ) {
-  bot.start((ctx) => {
+  bot.start(async (ctx) => {
+    const fromUser = ctx.from;
+
+    if (fromUser) {
+      try {
+        // Записываем или обновляем данные пользователя в MySQL
+        await db.execute(
+          `
+          INSERT INTO users (telegram_id, first_name, username)
+          VALUES (?, ?, ?)
+          ON DUPLICATE KEY UPDATE first_name = ?, username = ?
+        `,
+          [
+            fromUser.id,
+            fromUser.first_name,
+            fromUser.username || null,
+            fromUser.first_name,
+            fromUser.username || null,
+          ],
+        );
+        console.log(
+          `[DB] Пользователь ${fromUser.first_name} сохранен/обновлен.`,
+        );
+      } catch (err) {
+        console.error("Ошибка сохранения пользователя в БД:", err);
+      }
+    }
+
     ctx.reply(
-      "Привет! Я твой МСК бот-календарь с мультирассылкой.\n\n" +
+      `Привет, ${fromUser?.first_name || "пользователь"}! Я твой МСК бот-календарь с мультирассылкой.\n\n` +
         "📅 /add — запланировать событие (только в ЛС)\n" +
         "📋 /list — посмотреть список ваших событий",
     );

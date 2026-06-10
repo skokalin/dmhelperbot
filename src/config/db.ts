@@ -8,4 +8,7 @@ export const db = mysql.createPool({
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
+  // НАДЁЖНЫЙ ФИКС ТАЙМАУТОВ:
+  enableKeepAlive: true, // Заставляет драйвер пинговать базу и не давать закрывать коннекты
+  keepAliveInitialDelay: 10000, // Каждые 10 секунд
 });

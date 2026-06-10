@@ -16,6 +16,10 @@ services:
       - mysql_data:/var/lib/mysql
       # Автоматическое выполнение скрипта инициализации таблиц
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    deploy:
+      resources:
+        limits:
+          memory: 256M
 
   bot:
     build: .

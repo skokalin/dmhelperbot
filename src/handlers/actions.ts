@@ -5,6 +5,7 @@ import {
   createMinutesKeyboard,
   createChatsKeyboard,
   createRemindersKeyboard,
+  createRecurrenceKeyboard,
 } from "../keyboards/inline";
 
 export function initActions(
@@ -19,7 +20,7 @@ export function initActions(
     if (userSessions[userId]) userSessions[userId].selectedDate = selectedDate;
     await ctx.answerCbQuery();
     await ctx.editMessageText(
-      `Выбрана дата: ${selectedDate}\n\nШаг 2/5: Выбери час (МСК):`,
+      `Выбрана дата: ${selectedDate}\n\nШаг 2/6: Выбери час (МСК):`,
       createHoursKeyboard(),
     );
   });
@@ -31,7 +32,7 @@ export function initActions(
 
     await ctx.answerCbQuery();
     await ctx.editMessageText(
-      `Выбран час: ${hour}:00\n\nШаг 2/5: Уточни минуты:`,
+      `Выбран час: ${hour}:00\n\nШаг 2/6: Уточни минуты:`,
       createMinutesKeyboard(hour),
     );
   });
@@ -52,7 +53,7 @@ export function initActions(
       "SELECT chat_id, chat_title FROM chats",
     );
     await ctx.editMessageText(
-      `Время зафиксировано: ${hour}:${minute} (МСК)\n\nШаг 3/5: Выберите чаты для дублирования напоминания:`,
+      `Время зафиксировано: ${hour}:${minute} (МСК)\n\nШаг 3/6: Выберите чаты для дублирования напоминания:`,
       createChatsKeyboard(chats, userSessions[userId].selectedChats || []),
     );
   });
@@ -85,7 +86,7 @@ export function initActions(
     if (userSessions[userId]) userSessions[userId].step = "awaiting_reminders";
     await ctx.answerCbQuery();
     await ctx.editMessageText(
-      `Шаг 4/5: Выберите конфигурацию напоминаний:`,
+      `Шаг 4/6: Выберите конфигурацию напоминаний:`,
       createRemindersKeyboard(userSessions[userId].selectedReminders || []),
     );
   });
@@ -112,10 +113,30 @@ export function initActions(
     const userId = ctx.from?.id;
     if (!userId) return;
 
-    if (userSessions[userId]) userSessions[userId].step = "awaiting_title";
+    if (userSessions[userId]) {
+      userSessions[userId].step = "awaiting_recurrence";
+    }
+
     await ctx.answerCbQuery();
     await ctx.editMessageText(
-      `Настройки зафиксированы.\n\nШаг 5/5: Отправьте название события обычным текстовым сообщением.`,
+      `Шаг 5/6: Выберите регулярность повторения события:`,
+      createRecurrenceKeyboard(),
+    );
+  });
+
+  bot.action(/^set_recurrence:(.+)$/, async (ctx) => {
+    const userId = ctx.from?.id;
+    if (!userId || !ctx.match) return;
+    const recurrenceType = ctx.match[1];
+
+    if (userSessions[userId]) {
+      userSessions[userId].selectedRecurrence = recurrenceType;
+      userSessions[userId].step = "awaiting_title";
+    }
+
+    await ctx.answerCbQuery();
+    await ctx.editMessageText(
+      `Регулярность зафиксирована.\n\nШаг 6/6: Отправьте название события обычным текстовым сообщением.`,
     );
   });
 

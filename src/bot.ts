@@ -11,7 +11,7 @@ const app = express();
 app.use(cors()); // Разрешаем запросы с GitHub Pages
 app.use(express.json());
 
-app.get("*", async (req: Request, res: Response) => {
+app.get("/", async (req, res) => {
   try {
     res.json({ privet: "privet" });
   } catch (err) {
@@ -79,6 +79,11 @@ initCron(bot);
 bot
   .launch()
   .then(() => console.log("🚀 Модульная экосистема бота успешно запущена!"));
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`[Server] REST API запущен на порту ${PORT}`);
+});
 
 process.once("SIGINT", () => bot.stop("SIGINT"));
 process.once("SIGTERM", () => bot.stop("SIGTERM"));

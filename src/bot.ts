@@ -11,7 +11,7 @@ const app = express();
 app.use(cors()); // Разрешаем запросы с GitHub Pages
 app.use(express.json());
 
-app.get("*", async (req, res) => {
+app.get("*", async (req: Request, res: Response) => {
   try {
     res.json({ privet: "privet" });
   } catch (err) {

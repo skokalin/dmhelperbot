@@ -49,7 +49,7 @@ export function initCommands(
     }
     const userId = ctx.from.id;
     userSessions[userId] = { selectedChats: [], selectedReminders: [] };
-    ctx.reply("Шаг 1/5: Выбери дату:", createCalendarKeyboard());
+    ctx.reply("Шаг 1/6: Выбери дату:", createCalendarKeyboard());
   });
 
   bot.command("list", async (ctx) => {

@@ -147,3 +147,18 @@ export function createRemindersKeyboard(selectedOptions: string[]) {
 
   return Markup.inlineKeyboard(buttons);
 }
+
+export const RECURRENCE_OPTIONS = [
+  { id: "none", label: "❌ Не повторять" },
+  { id: "daily", label: "🔄 Каждый день" },
+  { id: "weekly", label: "🔄 Каждую неделю" },
+  { id: "monthly", label: "🔄 Каждый месяц" },
+  { id: "yearly", label: "🔄 Каждый год" },
+];
+
+export function createRecurrenceKeyboard() {
+  const buttons = RECURRENCE_OPTIONS.map((opt) => [
+    Markup.button.callback(opt.label, `set_recurrence:${opt.id}`),
+  ]);
+  return Markup.inlineKeyboard(buttons);
+}

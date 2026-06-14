@@ -20,11 +20,12 @@ export function initTextHandlers(
       const eventTitle = ctx.message.text.trim();
       const fullDateTimeStr = `${session.selectedDate} ${session.selectedTime}:00`;
       const targetChatsStr = (session.selectedChats || []).join(",");
+      const recurrence = session.selectedRecurrence || "none";
 
       try {
         const [result]: any = await db.execute(
-          "INSERT INTO events (user_id, event_title, event_date, target_chats) VALUES (?, ?, ?, ?)",
-          [userId, eventTitle, fullDateTimeStr, targetChatsStr],
+          "INSERT INTO events (user_id, event_title, event_date, target_chats, recurrence) VALUES (?, ?, ?, ?, ?)",
+          [userId, eventTitle, fullDateTimeStr, targetChatsStr, recurrence],
         );
         const eventId = result.insertId;
 
@@ -58,8 +59,8 @@ export function initTextHandlers(
           const dbReminderDate = `${rYear}-${rMonth}-${rDay} ${rHour}:${rMin}:00`;
 
           await db.execute(
-            "INSERT INTO event_reminders (event_id, reminder_date, reminder_type) VALUES (?, ?, ?)",
-            [eventId, dbReminderDate, option.label],
+            "INSERT INTO event_reminders (event_id, reminder_date, reminder_type, offset_ms) VALUES (?, ?, ?, ?)",
+            [eventId, dbReminderDate, option.label, option.ms],
           );
         }
 

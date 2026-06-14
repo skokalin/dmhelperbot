@@ -13,8 +13,21 @@ if (!token) {
 
 const bot = new Telegraf<Context>(token);
 
+interface UserSession {
+  selectedDate?: string;
+  selectedTime?: string;
+  selectedChats?: number[];
+  selectedReminders?: string[];
+  selectedRecurrence?: string;
+  step?:
+    | "awaiting_chats"
+    | "awaiting_reminders"
+    | "awaiting_recurrence"
+    | "awaiting_title";
+}
+
 // Единое хранилище сессий, передаваемое во все модули по ссылке
-const userSessions: Record<number, any> = {};
+const userSessions: Record<number, UserSession> = {};
 
 // --- Системный перехватчик структуры чатов (Группы/Каналы) ---
 bot.on("my_chat_member", async (ctx) => {

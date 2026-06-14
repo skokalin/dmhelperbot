@@ -142,7 +142,10 @@ export function createRemindersKeyboard(selectedOptions: string[]) {
 
   // Кнопка подтверждения во всю ширину в самом низу
   buttons.push([
-    Markup.button.callback("➡️ Далее: Ввести название", "confirm_reminders"),
+    Markup.button.callback(
+      "➡️ Далее: Управление регулярностью",
+      "confirm_reminders",
+    ),
   ]);
 
   return Markup.inlineKeyboard(buttons);

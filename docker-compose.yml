@@ -34,5 +34,19 @@ services:
       DB_PASSWORD: bot_password
       DB_NAME: calendar_db
 
+    # Добавляем веб-сервер, который сам заберет SSL-сертификат
+  nginx-proxy:
+    image: jc21/nginx-proxy-manager:latest
+    restart: always
+    ports:
+      - "80:80" # Для проверки сертификатов Let's Encrypt
+      - "443:443" # Для защищенных запросов от React-приложения
+      - "81:81" # Панель управления Nginx (замените на свой порт или закройте потом)
+    volumes:
+      - ./data:/data
+      - ./letsencrypt:/etc/letsencrypt
+    depends_on:
+      - bot
+
 volumes:
   mysql_data:

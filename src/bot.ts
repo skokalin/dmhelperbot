@@ -4,6 +4,20 @@ import { initCron } from "./services/cron";
 import { initCommands } from "./handlers/commands";
 import { initActions } from "./handlers/actions";
 import { initTextHandlers } from "./handlers/text";
+import express from "express";
+import cors from "cors";
+
+const app = express();
+app.use(cors()); // Разрешаем запросы с GitHub Pages
+app.use(express.json());
+
+app.get("*", async (req, res) => {
+  try {
+    res.json({ privet: "privet" });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
 
 const token = process.env.BOT_TOKEN;
 if (!token) {
